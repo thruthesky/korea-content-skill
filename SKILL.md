@@ -93,16 +93,24 @@ python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" categories --site-id
    python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" \
      topic-reserve --topic-slug "ph-cebu-diving" [--category-id 3] [--ttl-minutes 30]
    ```
-4. **Generate** — ONLY after a successful reservation, do the expensive work: gather **≥ 20 distinct web sources**, draft the article, format it (HTML or markdown).
-5. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every gate passes**. Otherwise revise (max 2 retries) or abandon the reservation.
+4. **Generate** — ONLY after a successful reservation, do the expensive work:
+   - Gather **≥ 20 distinct web sources**
+   - **Download ≥ 3 images locally** (curl with realistic User-Agent), then **upload each to the server** via `upload`, capture the returned `id` and server URL — never hotlink external images
+   - Draft the article in **Markdown** (≥ 5,000 words / ≥ 9,000 Korean chars), using the **full Markdown syntax** (headings, bullet + numbered lists, table, bold + italic, blockquote, inline link, horizontal rule, inline code, image)
+   - Sprinkle **≥ 15 emojis** through the body; every `##` heading gets a leading topic-matching emoji
+   - End the body with the **mandatory 📍 방문 정보 metadata table** containing country, region, city, full address, lat/lon (≥ 4 decimals), name, contact (price + hours optional)
+5. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every one of the 32 gates passes** (G1–G32). Otherwise revise (max 2 retries) or abandon the reservation.
    ```bash
-   # only after rubric passes:
+   # only after rubric passes — note --upload-ids must list every uploaded image:
    python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" \
-     create --title "..." --content "..." --category-id 3 \
-     --topic-slug "ph-cebu-diving" --reservation-id 889
+     create --title "..." --content "$BODY_MARKDOWN" --category-id 3 \
+     --topic-slug "ph-cebu-yakimix-buffet" --reservation-id 889 \
+     --upload-ids "124,125,126,127,128"
    ```
 
-**The 90/100 quality gate is mandatory.** A reserved-but-low-quality post is worse than no post — it consumes the slug permanently for this user (the reservation locks the slug after submission). If three drafts (1 original + 2 revisions) cannot reach 90, **do not submit**; let the reservation expire and pick a different topic.
+**The 90/100 quality gate AND 32 hard gates are mandatory.** A reserved-but-low-quality post is worse than no post — it consumes the slug permanently for this user (the reservation locks the slug after submission). If three drafts (1 original + 2 revisions) cannot pass every gate AND reach 90, **do not submit**; let the reservation expire and pick a different topic. **Never invent addresses, coordinates, or phone numbers** — fabrication forces a 0 in Accuracy and instantly fails the rubric.
+
+> ⏱️ **TTL hint**: Long-form posts (5,000+ words + image upload) often exceed the default 30-minute TTL. Use `topic-reserve --ttl-minutes 90` (max 120) when reserving for full place guides.
 
 **Rules of the system:**
 - Uniqueness is enforced **per user**: user A and user B can each post the same topic once; user A cannot post the same `topic_slug` (or the same normalized title+content) twice.
@@ -115,31 +123,47 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 
 #### Quality Score — quick summary
 
-100 points across 6 categories (full rubric, gates, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md)):
+100 points across 6 quality categories, gated by **32 hard requirements** (G1–G32). Full rubric, image/metadata workflow, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md).
 
 | Category | Max | What it measures |
 |----------|----:|------------------|
 | Originality & Uniqueness | 20 | Genuinely new framing/analysis vs. rehashed search results |
 | Depth & Substance | 20 | Concrete numbers, comparisons, trade-offs vs. surface definitions |
-| Accuracy & Verifiability | 15 | Sourced, current facts vs. unsupported or stale claims |
-| Structure & Readability | 15 | Clear sections, short paragraphs, lists/tables where they help |
-| Reader Value | 20 | Tailored to Korean expat audience, actionable, locally relevant |
-| Polish | 10 | No typos, natural Korean, no machine-translation artifacts |
+| Accuracy & Verifiability | 15 | Sourced, current facts (incl. coordinates, address, phone) vs. fabrication |
+| Structure, Markdown & Readability | 15 | Sections + full Markdown syntax + short paragraphs + visual rhythm |
+| Reader Value | 20 | Tailored to Korean expat audience, KRW conversions, Maps link, actionable |
+| Polish | 10 | No typos, natural Korean, no machine-translation artifacts, valid Markdown |
 
-**Pass requirement:** `total ≥ 90` AND all 7 gates (G1–G7) pass — sources ≥ 20, words ≥ 800 (or ≥ 1500 KO chars), sections ≥ 5, topic match, slug available, language coherent, valid HTML.
+**Pass requirement:** `total ≥ 90` AND **all 32 gates pass**. The 32 gates cover:
+
+| Group | Gates | Summary |
+|-------|-------|---------|
+| Content | G1–G7 | ≥ 20 sources · **≥ 5,000 words** (≥ 9,000 KO chars) · ≥ 5 sections · slug match · slug available · coherent language · **valid Markdown with full syntax** |
+| Metadata (REQUIRED) | G8–G14 | 🏳️ Country · 🗺️ Region · 🏙️ City · 📮 Address · 📌 **Lat/Lon (≥ 4 decimals)** · 🏢 Name · 📞 Contact |
+| Images | G15–G19 | ≥ 3 images · **download → upload → server URL** (no hotlinking) · descriptive alt text · ≥ 1 photo of the place · `--upload-ids` matches body URLs |
+| Markdown syntax | G20–G28 | Headings ##/### · bullet **and** numbered list · table · **bold** + *italic* · blockquote · inline link · `---` rule · inline code · Markdown image syntax |
+| Emoji & readability | G29–G32 | ≥ 15 emojis spread out · every `##` heading has a topic emoji · paragraphs ≤ 6 sentences (avg ≤ 4) · lists/tables/callouts every ~600 words |
+
+**Optional metadata** (do not gate, include if known): 💰 Pricing, ⏰ Hours, 🌐 Website.
 
 **On failure:**
-1. Identify `weak_areas` (categories that scored below the "Good" band)
-2. Revise **only those areas** — do not rewrite from scratch on round 1
-3. Re-score
-4. Max 2 revisions; if still < 90, abandon the reservation (let it expire) and pick another topic
+1. Fix **gate failures first** — they are absolute (e.g. G2 word count, G15 images, G12 coordinates).
+2. Identify `weak_areas` (quality categories below the "Good" band) and revise **only those** — do not rewrite from scratch on round 1.
+3. Re-score.
+4. Max 2 revisions; if still failing, abandon the reservation (let it expire) and pick another topic.
 
 The AI must keep an internal scorecard JSON like:
 ```json
-{ "scores": { "originality":18, "depth":17, "accuracy":14, "structure":13, "reader_value":19, "polish":9 },
+{ "word_count": 5421, "image_count": 5,
+  "metadata": { "country":"Philippines","region":"Cebu Province","city":"Cebu City",
+                "address":"123 Mango Ave, Lahug, Cebu City 6000",
+                "lat":10.3157, "lon":123.8854,
+                "name":"Sample Restaurant", "contact":"+63 32 123 4567" },
+  "gates_passed": ["G1","G2","...","G32"],
+  "scores": { "originality":18, "depth":17, "accuracy":14, "structure":13, "reader_value":19, "polish":9 },
   "total": 90, "pass": true, "weak_areas": [], "revision_round": 0 }
 ```
-Inflating scores defeats the purpose. Score honestly; if it fails, revise or abandon.
+Inflating scores or fabricating metadata defeats the purpose. **Never invent addresses, coordinates, or phone numbers** — abandon the topic instead.
 
 ### Step 3: Execute the content task
 
