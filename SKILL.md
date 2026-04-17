@@ -1,6 +1,6 @@
 ---
 name: content
-description: "Complete content management via Korea SNS (withcenter.com) REST API. API key based authentication (Authorization: Bearer). Supports user registration/login/profile updates, post CRUD, comment CRUD, file (image) uploads, site/category lookup and management, likes/bookmarks/reactions, notifications, and search. A complete API guide for external programs, AI, and software to create, update, and delete content on Korea SNS. Use when Claude performs the following tasks: (1) Korea SNS registration/login/API key retrieval (2) User profile update/avatar upload (3) Post create/update/delete/list (4) Comment create/update/delete (5) Upload images and files and attach them to posts/comments (6) Site list/category tree lookup (7) Toggle like/bookmark/reaction (8) Notifications lookup/search (9) withcenter.com API calls (10) Automatic API documentation lookup (GET /docs). Keywords: Korea SNS, withcenter, post, posts, writing, post registration, post update, post deletion, comment, comments, registration, login, profile, avatar, file upload, image, category, site, like, bookmark, reaction, notification, search, API, api_key"
+description: "Complete content management via Korea SNS (withcenter.com) REST API. API key based authentication (Authorization: Bearer). Supports user registration/login/profile updates, post CRUD, comment CRUD, file (image) uploads, site/category lookup and management, likes/bookmarks/reactions, notifications, search, and sub-site admin banner ads (header/sidebar/forum banners with begin_at/end_at scheduling). A complete API guide for external programs, AI, and software to create, update, and delete content on Korea SNS. Use when Claude performs the following tasks: (1) Korea SNS registration/login/API key retrieval (2) User profile update/avatar upload (3) Post create/update/delete/list (4) Comment create/update/delete (5) Upload images and files and attach them to posts/comments (6) Site list/category tree lookup (7) Toggle like/bookmark/reaction (8) Notifications lookup/search (9) withcenter.com API calls (10) Automatic API documentation lookup (GET /docs) (11) Banner ads CRUD on a sub-site (header, sidebar, forum large/small/between banners — requires sub-site admin API key). Keywords: Korea SNS, withcenter, post, posts, writing, post registration, post update, post deletion, comment, comments, registration, login, profile, avatar, file upload, image, category, site, like, bookmark, reaction, notification, search, API, api_key, banner, banner ad, banners, header banner, sidebar banner, forum banner, between-post ad, banner_type, banner position, banner schedule, begin_at, end_at, ad scheduling"
 ---
 
 # Korea SNS — Complete Content Management Skill
@@ -188,6 +188,14 @@ python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" 
 # → Pass the returned upload ID through --upload-ids when creating a post/comment
 python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" create --title "Photo post" --content "Content" --upload-ids "10,11"
 
+# Test/seed images with no user-supplied file:
+#   1. Default → picsum.photos (curl -L to a local temp file, then upload the file)
+#        curl -sL "https://picsum.photos/400/300?random=$RANDOM" -o /tmp/img.jpg
+#   2. Opt-in for "interesting/fun" imagery → WebSearch a royalty-free source
+#      (Unsplash / Pexels / Wikimedia Commons), curl -L to a local file, then upload.
+#   Always download locally first — the /files/upload endpoint only accepts multipart, never a remote URL.
+#   Full workflow + size table: commands/create-banner.md Step 5.
+
 # Profile update
 python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" update-profile --display-name "New name" --bio "About me"
 
@@ -307,6 +315,13 @@ GET    /search                         — Full-text search
 GET    /me/topic-coverage              — List my posts that carry a topic_slug (AI duplicate prevention)
 POST   /topics/reserve                 — Atomically reserve a topic_slug (TTL 30m default)
 POST   /topics/check                   — Batch-check availability of candidate topic_slugs (dry run)
+
+GET    /admin/banners                  — List banners at a position (admin; per sub-site)
+GET    /admin/banners/{id}             — Get a single banner (admin)
+POST   /admin/banners                  — Create a banner (admin)
+PUT    /admin/banners/{id}             — Update a banner (admin; omit a field to leave it untouched)
+DELETE /admin/banners/{id}             — Soft-delete a banner (admin)
+POST   /banners/{id}/click             — Public click tracker (no auth; increments click_count)
 ```
 
 ## Detailed API Documentation
@@ -314,4 +329,5 @@ POST   /topics/check                   — Batch-check availability of candidate
 - **Auth/User API** (registration, login, profile update, avatar, blocking): [references/api-auth.md](references/api-auth.md)
 - **Content API** (posts, comments, likes, bookmarks, reactions, AI topic reservation): [references/api-content.md](references/api-content.md)
 - **System API** (file upload, sites, categories, notifications, search, reports): [references/api-system.md](references/api-system.md)
+- **Banner Ads API** (admin CRUD at `/admin/banners`, per sub-site; position × type matrix; public click tracker): [references/api-banners.md](references/api-banners.md)
 - **Content Quality Score Rubric** (mandatory ≥ 90/100 self-evaluation gate before `POST /posts` for AI-generated content): [references/content-quality-score.md](references/content-quality-score.md)

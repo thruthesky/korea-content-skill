@@ -36,6 +36,20 @@ Usage:
   python3 korea_api.py --api-key KEY sites [--page 1]
   python3 korea_api.py --api-key KEY categories --site-id 1
 
+  # Banner ads (admin-only, per sub-site — --base-url must point at the sub-site)
+  python3 korea_api.py --api-key KEY --base-url "https://apple.withcenter.com/api/v1" \
+      banner-list --position header
+  python3 korea_api.py --api-key KEY --base-url "https://apple.withcenter.com/api/v1" \
+      banner-show --id 42
+  python3 korea_api.py --api-key KEY --base-url "https://apple.withcenter.com/api/v1" \
+      banner-create --title "Sale" --position header \
+      --begin-at "2026-04-20 00:00:00" --end-at "2026-05-20 00:00:00" \
+      --click-url "https://example.com" --upload-ids "101"
+  python3 korea_api.py --api-key KEY --base-url "https://apple.withcenter.com/api/v1" \
+      banner-update --id 42 --title "Mega Sale"
+  python3 korea_api.py --api-key KEY --base-url "https://apple.withcenter.com/api/v1" \
+      banner-delete --id 42
+
   # API documentation
   python3 korea_api.py --api-key "" docs [--category post]
 """
@@ -328,6 +342,128 @@ def cmd_categories(args):
     output(result)
 
 
+# --- Banner ads (admin CRUD; per sub-site — --base-url must point at the sub-site) ---
+
+# Contact and attachment-id flag sets — kept as constants so the parser and handler stay in sync.
+_BANNER_CONTACT_FIELDS = (
+    "contact_telegram", "contact_phone", "contact_kakao",
+    "contact_email", "contact_facebook", "contact_whatsapp", "contact_viber",
+)
+
+
+def _parse_id_list(raw: Optional[str]) -> list:
+    """Parse a comma-separated list of integer IDs. None -> None (omit from body)."""
+    if raw is None:
+        return None
+    return [int(x.strip()) for x in raw.split(",") if x.strip()]
+
+
+def cmd_banner_list(args):
+    """List banners at a position (header/sidebar/forum)."""
+    params = {"position": args.position}
+    if args.category_id is not None:
+        params["category_id"] = args.category_id
+    result = api_request("GET", "/admin/banners", args.api_key, params=params)
+    output(result)
+
+
+def cmd_banner_show(args):
+    """Get a single banner (admin)."""
+    result = api_request("GET", f"/admin/banners/{args.id}", args.api_key)
+    output(result)
+
+
+def cmd_banner_create(args):
+    """Create a banner. Requires site-admin API key and sub-site --base-url."""
+    data = {"title": args.title, "position": args.position}
+
+    # Optional scalar fields — only send when the caller passed them.
+    for attr, key in (
+        ("banner_type", "banner_type"),
+        ("category_id", "category_id"),
+        ("subtitle", "subtitle"),
+        ("click_url", "click_url"),
+        ("content", "content"),
+        ("notes", "notes"),
+        ("sort_order", "sort_order"),
+        ("between_interval", "between_interval"),
+        ("begin_at", "begin_at"),
+        ("end_at", "end_at"),
+    ):
+        val = getattr(args, attr, None)
+        if val is not None:
+            data[key] = val
+
+    for cf in _BANNER_CONTACT_FIELDS:
+        val = getattr(args, cf, None)
+        if val is not None:
+            data[cf] = val
+
+    uploads = _parse_id_list(args.upload_ids)
+    if uploads is not None:
+        data["upload_ids"] = uploads
+    attachments = _parse_id_list(args.attachment_ids)
+    if attachments is not None:
+        data["attachment_ids"] = attachments
+    advertiser = _parse_id_list(args.advertiser_attachment_ids)
+    if advertiser is not None:
+        data["advertiser_attachment_ids"] = advertiser
+
+    result = api_request("POST", "/admin/banners", args.api_key, data=data)
+    output(result)
+
+
+def cmd_banner_update(args):
+    """Update a banner. Omit flags to leave fields untouched; '' clears a nullable field."""
+    data = {}
+
+    for attr, key in (
+        ("title", "title"),
+        ("position", "position"),
+        ("banner_type", "banner_type"),
+        ("category_id", "category_id"),
+        ("subtitle", "subtitle"),
+        ("click_url", "click_url"),
+        ("content", "content"),
+        ("notes", "notes"),
+        ("sort_order", "sort_order"),
+        ("between_interval", "between_interval"),
+        ("begin_at", "begin_at"),
+        ("end_at", "end_at"),
+    ):
+        val = getattr(args, attr, None)
+        if val is not None:
+            data[key] = val
+
+    for cf in _BANNER_CONTACT_FIELDS:
+        val = getattr(args, cf, None)
+        if val is not None:
+            data[cf] = val
+
+    uploads = _parse_id_list(args.upload_ids)
+    if uploads is not None:
+        data["upload_ids"] = uploads
+    attachments = _parse_id_list(args.attachment_ids)
+    if attachments is not None:
+        data["attachment_ids"] = attachments
+    advertiser = _parse_id_list(args.advertiser_attachment_ids)
+    if advertiser is not None:
+        data["advertiser_attachment_ids"] = advertiser
+
+    if not data:
+        print('{"message": "No fields to update."}')
+        sys.exit(1)
+
+    result = api_request("PUT", f"/admin/banners/{args.id}", args.api_key, data=data)
+    output(result)
+
+
+def cmd_banner_delete(args):
+    """Soft-delete a banner."""
+    result = api_request("DELETE", f"/admin/banners/{args.id}", args.api_key)
+    output(result)
+
+
 # --- API documentation ---
 
 def cmd_docs(args):
@@ -434,6 +570,53 @@ def main():
     p = sub.add_parser("categories", help="Get the category tree")
     p.add_argument("--site-id", required=True, type=int)
 
+    # Banner ads — admin CRUD (per sub-site; set --base-url to the sub-site host).
+    def _add_banner_optional_fields(parser, for_create: bool):
+        """Flags shared between banner-create and banner-update."""
+        parser.add_argument("--banner-type", choices=["large", "small", "between"],
+                            help="Only meaningful for position=forum; default 'large' on create")
+        parser.add_argument("--category-id", type=int,
+                            help="Required when position=forum")
+        parser.add_argument("--subtitle")
+        parser.add_argument("--click-url")
+        parser.add_argument("--content", help="Rich text shown on /ad/show")
+        parser.add_argument("--notes", help="Admin-only internal notes")
+        parser.add_argument("--sort-order", type=int)
+        parser.add_argument("--between-interval", type=int,
+                            help="For banner_type=between: show the ad every N posts (default 5)")
+        parser.add_argument("--begin-at", help="ISO timestamp; active only if both begin-at and end-at bracket now")
+        parser.add_argument("--end-at", help="ISO timestamp")
+        for cf in ("telegram", "phone", "kakao", "email", "facebook", "whatsapp", "viber"):
+            parser.add_argument(f"--contact-{cf}", dest=f"contact_{cf}",
+                                help=f"Advertiser {cf} contact; '' clears the field on update")
+        parser.add_argument("--upload-ids",
+                            help="Comma-separated upload IDs for the banner display image (e.g. 101,102)")
+        parser.add_argument("--attachment-ids",
+                            help="Comma-separated upload IDs for admin-internal attachments (receipts, etc.)")
+        parser.add_argument("--advertiser-attachment-ids",
+                            help="Comma-separated upload IDs for advertiser-public attachments (shown on /ad/show)")
+
+    p = sub.add_parser("banner-list", help="List banners at a position (site-admin)")
+    p.add_argument("--position", required=True, choices=["header", "sidebar", "forum"])
+    p.add_argument("--category-id", type=int, help="Required when --position=forum")
+
+    p = sub.add_parser("banner-show", help="Get a single banner by id (site-admin)")
+    p.add_argument("--id", required=True, type=int)
+
+    p = sub.add_parser("banner-create", help="Create a banner (site-admin, sub-site base URL)")
+    p.add_argument("--title", required=True)
+    p.add_argument("--position", required=True, choices=["header", "sidebar", "forum"])
+    _add_banner_optional_fields(p, for_create=True)
+
+    p = sub.add_parser("banner-update", help="Update a banner; omit a flag to leave a field untouched")
+    p.add_argument("--id", required=True, type=int)
+    p.add_argument("--title")
+    p.add_argument("--position", choices=["header", "sidebar", "forum"])
+    _add_banner_optional_fields(p, for_create=False)
+
+    p = sub.add_parser("banner-delete", help="Soft-delete a banner (site-admin)")
+    p.add_argument("--id", required=True, type=int)
+
     # API documentation
     p = sub.add_parser("docs", help="Fetch API documentation")
     p.add_argument("--category", help="Filter: auth, user, post, comment, file, site, category")
@@ -475,6 +658,11 @@ def main():
         "comment-delete": cmd_comment_delete,
         "sites": cmd_sites,
         "categories": cmd_categories,
+        "banner-list": cmd_banner_list,
+        "banner-show": cmd_banner_show,
+        "banner-create": cmd_banner_create,
+        "banner-update": cmd_banner_update,
+        "banner-delete": cmd_banner_delete,
         "docs": cmd_docs,
         "topic-coverage": cmd_topic_coverage,
         "topic-reserve": cmd_topic_reserve,
