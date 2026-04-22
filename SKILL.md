@@ -90,9 +90,11 @@ python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" sites
 python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" categories --site-id 1
 ```
 
-### Step 2.5: AI Pre-flight Topic Workflow (Plan → Reserve → Generate → **Score** → Submit)
+### Step 2.5: AI Pre-flight Topic Workflow (Plan → Reserve → Generate → **Extract claims → Red-team → Score** → Submit)
 
-**When AI is generating content**, do not waste tokens by drafting first and being rejected later, and do not pollute the site with low-quality posts. Always run this **5-step handshake** with the server. Steps 1–3 are cheap API calls. Step 4 is the expensive LLM/web-search work — it runs **only after** a successful reservation. Step 5 is a self-evaluation gate that **must pass at ≥ 90/100** before submission.
+**When AI is generating content**, do not waste tokens by drafting first and being rejected later, and do not pollute the site with low-quality or **fabricated** posts. Always run this **7-step handshake** with the server. Steps 1–3 are cheap API calls. Step 4 is the expensive LLM/web-search work — it runs **only after** a successful reservation. Steps 5–7 are verification gates that **must all pass** before submission.
+
+> ⚠️ **Why 7 steps, not 5**: Early versions of this workflow had 5 steps (plan → check → reserve → generate → score). In practice, the self-evaluation score passed posts that contained **fabricated citations, invented phone numbers, hallucinated anchor-dates, and outdated emergency/legal references** — because an LLM scoring its own output cannot detect its own hallucinations. Steps 5 (claim extraction) and 6 (independent red-team) close that loop. See [references/hallucination-prevention.md](references/hallucination-prevention.md) for the specific failure modes this guards against.
 
 1. **Plan** — Call `topic-coverage` to see which `topic_slug`s the current user has already used.
    ```bash
@@ -110,21 +112,41 @@ python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" categories --site-id
      topic-reserve --topic-slug "ph-cebu-diving" [--category-id 3] [--ttl-minutes 30]
    ```
 4. **Generate** — ONLY after a successful reservation, do the expensive work:
-   - Gather **≥ 20 distinct web sources**
-   - **Download ≥ 3 images locally** (curl with realistic User-Agent), then **upload each to the server** via `upload`, capture the returned `id` and server URL — never hotlink external images
-   - Draft the article in **Markdown** (≥ 5,000 words / ≥ 9,000 Korean chars), using the **full Markdown syntax** (headings, bullet + numbered lists, table, bold + italic, blockquote, inline link, horizontal rule, inline code, image)
-   - Sprinkle **≥ 15 emojis** through the body; every `##` heading gets a leading topic-matching emoji
-   - End the body with the **mandatory 📍 방문 정보 metadata table** containing country, region, city, full address, lat/lon (≥ 4 decimals), name, contact (price + hours optional)
-5. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every one of the 32 gates passes** (G1–G32). Otherwise revise (max 2 retries) or abandon the reservation.
+   - Gather **≥ 20 distinct web sources**. While researching, maintain a working **claim ledger** (`{claim, source_url, source_quote, date_accessed}`) — every specific fact you plan to use must get an entry as you discover it, not retroactively after drafting.
+   - **Download ≥ 3 images locally** (curl with realistic User-Agent), then **upload each to the server** via `upload`, capture the returned `id` and server URL — never hotlink external images.
+   - Draft the article in **Markdown**, targeting the length band for the topic class (see *Length tiers* below) — **not** a blanket 5,000-word floor. Use the **full Markdown syntax** (headings, bullet + numbered lists, table, bold + italic, blockquote, inline link, horizontal rule, inline code, image).
+   - Sprinkle **≥ 15 emojis** through the body; every `##` heading gets a leading topic-matching emoji.
+   - End the body with the **mandatory 📍 방문 정보 metadata table** containing country, region, city, full address, lat/lon (≥ 4 decimals), name, contact (price + hours optional).
+   - 🔴 **Anti-hallucination rules (absolute)** — detailed catalog in [references/hallucination-prevention.md](references/hallucination-prevention.md):
+     - **Never invent citations.** If you do not have a specific URL for a specific claim, omit the specific detail or hedge with a vague phrase ("여러 연구", "some reports") — never invent a journal name, author, or year to sound authoritative.
+     - **Never invent anchor numbers.** Phrases like "1,300년 인류사에서", "연간 45,000명" must be sourced; otherwise replace with vague-but-true ("현대 해양 관찰 기록에서", "매년 수만 명").
+     - **Specifics (phones, addresses, lat/lon, law numbers, emergency numbers, embassy contacts) require a primary source** — the owning entity's own website, the official statute text, the government hotline page. Secondary-source mentions are not sufficient for these categories.
+     - When uncertain, **drop the specific and keep the general**. Readers forgive vagueness; they don't forgive wrong phone numbers, outdated emergency codes, or fabricated laws.
+5. **Extract claims** — Produce a structured `claims.json` listing every testable factual claim from the draft (numbers, names, dates, phones, addresses, coordinates, laws, citations, absolute statements like "no recorded cases"). Each entry records `source_url`, `confidence`, and `risk_class` (`safety` / `legal` / `financial` / `contact` / `descriptive`). Any claim with `source_url: null` is either removed or replaced with a verified one. **High-risk-class claims (`safety`/`legal`/`financial`/`contact`) may not ship with `confidence < "high"`.** Full spec in [references/content-quality-score.md §10](references/content-quality-score.md).
+6. **Red-team pass** — Spawn an **independent fact-check agent** (fresh context, ideally a different model invocation) with the draft + claim ledger. The agent returns `{definite_errors, likely_errors, plausible_unverified}`. Any `definite_errors.length > 0` → block submission, revise, repeat. This closes the self-grading loop that a single-model rubric cannot. Prompt template in [references/hallucination-prevention.md](references/hallucination-prevention.md).
+7. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every one of the 38 gates passes** (G1–G38 — including the new anti-hallucination gates G33–G38). Otherwise revise (max 2 retries) or abandon the reservation.
    ```bash
-   # only after rubric passes — note --upload-ids must list every uploaded image:
+   # only after claims.json passes, red-team returns zero definite errors, and rubric ≥ 90:
    python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" \
      create --title "..." --content "$BODY_MARKDOWN" --category-id 3 \
      --topic-slug "ph-cebu-yakimix-buffet" --reservation-id 889 \
      --upload-ids "124,125,126,127,128"
    ```
 
-**The 90/100 quality gate AND 32 hard gates are mandatory.** A reserved-but-low-quality post is worse than no post — it consumes the slug permanently for this user (the reservation locks the slug after submission). If three drafts (1 original + 2 revisions) cannot pass every gate AND reach 90, **do not submit**; let the reservation expire and pick a different topic. **Never invent addresses, coordinates, or phone numbers** — fabrication forces a 0 in Accuracy and instantly fails the rubric.
+**The 90/100 quality gate, 38 hard gates, AND clean red-team pass are all mandatory.** A reserved-but-low-quality or fabricated post is worse than no post — it consumes the slug permanently for this user and damages site credibility. If three drafts (1 original + 2 revisions) cannot clear all three bars, **do not submit**; let the reservation expire and pick a different topic.
+
+#### Length tiers — target range by topic class (replaces the old ≥ 5,000-word floor)
+
+The old ≥ 9,000 Korean-char floor forced every topic — even small ones — into exhaustive-guide territory, producing bloated posts no one reads to the end. New policy: length follows topic depth, within a target range **with a cap** so posts don't become encyclopedias.
+
+| Topic class | Target Korean chars | Typical read time | Examples |
+|---|---|---|---|
+| **Place / destination guide** | 4,500 – 7,000 | 8–12 min | Oslob whale shark, Boracay beaches, Palawan El Nido |
+| **How-to / visa / logistics** | 2,500 – 4,500 | 5–8 min | 9G visa 연장, GCash 외국인 가입, SIM 비교 |
+| **Restaurant / single venue review** | 1,500 – 3,000 | 3–5 min | 세부 야키믹스 뷔페, BGC 한식당 리뷰 |
+| **Cultural deep-dive / long-form essay** | 5,000 – 8,000 | 10–15 min | 필리핀 가톨릭 문화, 필리피노 결혼식 관습 |
+
+Both **undershooting** (shallow) and **overshooting** (bloated) fail the new G2. Rewards hitting the right size *for the topic*, not chasing maximum word count.
 
 > ⏱️ **TTL hint**: Long-form posts (5,000+ words + image upload) often exceed the default 30-minute TTL. Use `topic-reserve --ttl-minutes 90` (max 120) when reserving for full place guides.
 
@@ -139,7 +161,7 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 
 #### Quality Score — quick summary
 
-100 points across 6 quality categories, gated by **32 hard requirements** (G1–G32). Full rubric, image/metadata workflow, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md).
+100 points across 6 quality categories, gated by **38 hard requirements** (G1–G38). Full rubric, image/metadata workflow, claim-extraction spec, red-team prompt, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md).
 
 | Category | Max | What it measures |
 |----------|----:|------------------|
@@ -150,15 +172,16 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 | Reader Value | 20 | Tailored to Korean expat audience, KRW conversions, Maps link, actionable |
 | Polish | 10 | No typos, natural Korean, no machine-translation artifacts, valid Markdown |
 
-**Pass requirement:** `total ≥ 90` AND **all 32 gates pass**. The 32 gates cover:
+**Pass requirement:** `total ≥ 90` AND **all 38 gates pass** AND the independent red-team pass returns `definite_errors: []`. The 38 gates cover:
 
 | Group | Gates | Summary |
 |-------|-------|---------|
-| Content | G1–G7 | ≥ 20 sources · **≥ 5,000 words** (≥ 9,000 KO chars) · ≥ 5 sections · slug match · slug available · coherent language · **valid Markdown with full syntax** |
+| Content | G1–G7 | ≥ 20 sources · **length in target band for topic class** (see Length tiers) · ≥ 5 sections · slug match · slug available · coherent language · **valid Markdown with full syntax** |
 | Metadata (REQUIRED) | G8–G14 | 🏳️ Country · 🗺️ Region · 🏙️ City · 📮 Address · 📌 **Lat/Lon (≥ 4 decimals)** · 🏢 Name · 📞 Contact |
 | Images | G15–G19 | ≥ 3 images · **download → upload → server URL** (no hotlinking) · descriptive alt text · ≥ 1 photo of the place · `--upload-ids` matches body URLs |
 | Markdown syntax | G20–G28 | Headings ##/### · bullet **and** numbered list · table · **bold** + *italic* · blockquote · inline link · `---` rule · inline code · Markdown image syntax |
 | Emoji & readability | G29–G32 | ≥ 15 emojis spread out · every `##` heading has a topic emoji · paragraphs ≤ 6 sentences (avg ≤ 4) · lists/tables/callouts every ~600 words |
+| **Anti-hallucination (NEW)** | **G33–G38** | Every academic citation has a DOI or direct URL · every phone/emergency number links to the owning entity's official page · every law/regulation number links to official statute text · every "since Year" or "N-year history" claim cites a source · every absolute claim ("no recorded cases", "only operation in the world", "largest ever") has a source · no category-mismatch (safety/legal/financial/contact) claim with `confidence < "high"` |
 
 **Optional metadata** (do not gate, include if known): 💰 Pricing, ⏰ Hours, 🌐 Website.
 
@@ -170,16 +193,19 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 
 The AI must keep an internal scorecard JSON like:
 ```json
-{ "word_count": 5421, "image_count": 5,
+{ "word_count": 5421, "korean_char_count": 6200, "topic_class": "place_guide",
+  "length_band_hit": true,
+  "image_count": 5,
   "metadata": { "country":"Philippines","region":"Cebu Province","city":"Cebu City",
                 "address":"123 Mango Ave, Lahug, Cebu City 6000",
                 "lat":10.3157, "lon":123.8854,
                 "name":"Sample Restaurant", "contact":"+63 32 123 4567" },
-  "gates_passed": ["G1","G2","...","G32"],
+  "gates_passed": ["G1","G2","...","G38"],
+  "red_team": { "definite_errors":[], "likely_errors":[], "plausible_unverified":[] },
   "scores": { "originality":18, "depth":17, "accuracy":14, "structure":13, "reader_value":19, "polish":9 },
   "total": 90, "pass": true, "weak_areas": [], "revision_round": 0 }
 ```
-Inflating scores or fabricating metadata defeats the purpose. **Never invent addresses, coordinates, or phone numbers** — abandon the topic instead.
+Inflating scores or fabricating metadata defeats the purpose. **Never invent addresses, coordinates, phone numbers, academic citations, law numbers, or emergency codes** — abandon the topic instead.
 
 ### Step 3: Execute the content task
 
@@ -346,4 +372,5 @@ POST   /banners/{id}/click             — Public click tracker (no auth; increm
 - **Content API** (posts, comments, likes, bookmarks, reactions, AI topic reservation): [references/api-content.md](references/api-content.md)
 - **System API** (file upload, sites, categories, notifications, search, reports): [references/api-system.md](references/api-system.md)
 - **Banner Ads API** (admin CRUD at `/admin/banners`, per sub-site; position × type matrix; public click tracker): [references/api-banners.md](references/api-banners.md)
-- **Content Quality Score Rubric** (mandatory ≥ 90/100 self-evaluation gate before `POST /posts` for AI-generated content): [references/content-quality-score.md](references/content-quality-score.md)
+- **Content Quality Score Rubric** (mandatory ≥ 90/100 self-evaluation gate + 38 hard gates + claim-extraction spec + red-team pass, applied before `POST /posts` for AI-generated content): [references/content-quality-score.md](references/content-quality-score.md)
+- **Hallucination Prevention** (failure-mode catalog from real incidents, countermeasures, red-team prompt template, claim-risk classification — read before drafting any factual/research-heavy post): [references/hallucination-prevention.md](references/hallucination-prevention.md)
