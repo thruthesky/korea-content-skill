@@ -143,7 +143,7 @@ python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" categories --site-id
      - When uncertain, **drop the specific and keep the general**. Readers forgive vagueness; they don't forgive wrong phone numbers, outdated emergency codes, or fabricated laws.
 5. **Extract claims** — Produce a structured `claims.json` listing every testable factual claim from the draft (numbers, names, dates, phones, addresses, coordinates, laws, citations, absolute statements like "no recorded cases"). Each entry records `source_url`, `confidence`, and `risk_class` (`safety` / `legal` / `financial` / `contact` / `descriptive`). Any claim with `source_url: null` is either removed or replaced with a verified one. **High-risk-class claims (`safety`/`legal`/`financial`/`contact`) may not ship with `confidence < "high"`.** Full spec in [references/content-quality-score.md §10](references/content-quality-score.md).
 6. **Red-team pass** — Spawn an **independent fact-check agent** (fresh context, ideally a different model invocation) with the draft + claim ledger. The agent returns `{definite_errors, likely_errors, plausible_unverified}`. Any `definite_errors.length > 0` → block submission, revise, repeat. This closes the self-grading loop that a single-model rubric cannot. Prompt template in [references/hallucination-prevention.md](references/hallucination-prevention.md).
-7. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every one of the 38 gates passes** (G1–G38 — including the new anti-hallucination gates G33–G38). Otherwise revise (max 2 retries) or abandon the reservation.
+7. **Score & Submit** — Apply the **Content Quality Score rubric** in [references/content-quality-score.md](references/content-quality-score.md). Submit **only if the total score ≥ 90/100 AND every one of the 40 gates passes** (G1–G40 — including anti-hallucination gates G33–G38 and extended fact-verification gates G39–G40). Otherwise revise (max 2 retries) or abandon the reservation.
    ```bash
    # only after claims.json passes, red-team returns zero definite errors, and rubric ≥ 90:
    python3 skills/korea/scripts/korea_api.py --api-key "{KEY}" --base-url "{BASE}" \
@@ -180,7 +180,7 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 
 #### Quality Score — quick summary
 
-100 points across 6 quality categories, gated by **38 hard requirements** (G1–G38). Full rubric, image/metadata workflow, claim-extraction spec, red-team prompt, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md).
+100 points across 6 quality categories, gated by **40 hard requirements** (G1–G40). Full rubric, image/metadata workflow, claim-extraction spec, red-team prompt, and revision guidance: [references/content-quality-score.md](references/content-quality-score.md).
 
 | Category | Max | What it measures |
 |----------|----:|------------------|
@@ -191,7 +191,7 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 | Reader Value | 20 | Tailored to Korean expat audience, KRW conversions, Maps link, actionable |
 | Polish | 10 | No typos, natural Korean, no machine-translation artifacts, valid Markdown |
 
-**Pass requirement:** `total ≥ 90` AND **all 38 gates pass** AND the independent red-team pass returns `definite_errors: []`. The 38 gates cover:
+**Pass requirement:** `total ≥ 90` AND **all 40 gates pass** AND the independent red-team pass returns `definite_errors: []`. The 40 gates cover:
 
 | Group | Gates | Summary |
 |-------|-------|---------|
@@ -200,7 +200,8 @@ Only when topic-reserve returns 201 should the AI spend real tokens on web searc
 | Images | G15–G19 | ≥ 3 images · **download → upload → server URL** (no hotlinking) · descriptive alt text · ≥ 1 photo of the place · `--upload-ids` matches body URLs |
 | Markdown syntax | G20–G28 | Headings ##/### · bullet **and** numbered list · table · **bold** + *italic* · blockquote · inline link · `---` rule · inline code · Markdown image syntax |
 | Emoji & readability | G29–G32 | ≥ 15 emojis spread out · every `##` heading has a topic emoji · paragraphs ≤ 6 sentences (avg ≤ 4) · lists/tables/callouts every ~600 words |
-| **Anti-hallucination (NEW)** | **G33–G38** | Every academic citation has a DOI or direct URL · every phone/emergency number links to the owning entity's official page · every law/regulation number links to official statute text · every "since Year" or "N-year history" claim cites a source · every absolute claim ("no recorded cases", "only operation in the world", "largest ever") has a source · no category-mismatch (safety/legal/financial/contact) claim with `confidence < "high"` |
+| **Anti-hallucination (v2)** | **G33–G38** | Every academic citation has a DOI or direct URL · every phone/emergency number links to the owning entity's official page · every law/regulation/local-ordinance number links to official text (or news article naming number + year) · every "since Year" or "N-year history" claim cites a source · every absolute claim ("no recorded cases", "only operation in the world", "largest ever") has a source · no category-mismatch (safety/legal/financial/contact) claim with `confidence < "high"` |
+| **Extended fact-verification (v2.1)** | **G39–G40** | Every proper noun in heading/table/📍 metadata (or used 3+ times) has a `source_url` with matching spelling + administrative type · every physical measurement (height, depth, distance, duration, capacity) has a `source_url` or is a clearly-labeled approximation |
 
 **Optional metadata** (do not gate, include if known): 💰 Pricing, ⏰ Hours, 🌐 Website.
 
@@ -219,7 +220,7 @@ The AI must keep an internal scorecard JSON like:
                 "address":"123 Mango Ave, Lahug, Cebu City 6000",
                 "lat":10.3157, "lon":123.8854,
                 "name":"Sample Restaurant", "contact":"+63 32 123 4567" },
-  "gates_passed": ["G1","G2","...","G38"],
+  "gates_passed": ["G1","G2","...","G40"],
   "red_team": { "definite_errors":[], "likely_errors":[], "plausible_unverified":[] },
   "scores": { "originality":18, "depth":17, "accuracy":14, "structure":13, "reader_value":19, "polish":9 },
   "total": 90, "pass": true, "weak_areas": [], "revision_round": 0 }

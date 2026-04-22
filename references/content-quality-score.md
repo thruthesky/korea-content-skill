@@ -21,7 +21,7 @@ Plan → Check → Reserve → Generate (research + draft + image upload)
                                                     ↓ clean                                   │ yes
                                             Score (self-eval; this rubric)                    ↓
                                                     ↓                                   revise or abandon
-                               ┌────── pass (all 38 gates + ≥ 90/100) ──────┐
+                               ┌────── pass (all 40 gates + ≥ 90/100) ──────┐
                                ↓                                             ↓
                     Submit (POST /posts)                              (fail → revise up to 2x)
 ```
@@ -29,7 +29,7 @@ Plan → Check → Reserve → Generate (research + draft + image upload)
 - Apply the rubric **once per draft**, recording the subscore for every category.
 - Score honestly. Inflating scores to get past the gate defeats the purpose.
 - The red-team pass must return `definite_errors: []` — any definite error blocks submission even if the rubric score is high.
-- If three drafts (1 original + 2 revisions) cannot clear all three bars (38 gates + ≥90 rubric + clean red-team), **release the reservation** (let it expire) and move to the next topic instead of publishing garbage.
+- If three drafts (1 original + 2 revisions) cannot clear all three bars (40 gates + ≥90 rubric + clean red-team), **release the reservation** (let it expire) and move to the next topic instead of publishing garbage.
 
 ### 1.1 Length tiers — target range by topic class
 
@@ -133,12 +133,23 @@ Bare HTML (e.g. `<table>`, `<div>`) is **not allowed** unless Markdown cannot ex
 |------|-------------|---------------|
 | **G33** | **Every academic / journal citation** includes a DOI or a direct URL to the paper/abstract. A citation without one fails this gate — generic "Schleimer et al., 2018" without a link is treated as fabricated. | Every citation in the body maps to a real, reachable link. |
 | **G34** | **Every phone number, emergency code, or contact hotline** links to the owning entity's **current** official page (embassy, municipal hotline, business website). Secondary blog mentions are not sufficient. | Each phone in claim ledger has `source_url` pointing to the owner's site. |
-| **G35** | **Every law, statute, or regulation number** cited (e.g. `Republic Act 10654`, `FAO No. 193`) links to the official statute text (e.g. `lawphil.net`, `officialgazette.gov.ph`). Cited law must actually cover the claimed subject matter. | Follow each cited law number and confirm scope. |
+| **G35** | **Every law, statute, regulation, or local ordinance** cited (e.g. `Republic Act 10654`, `FAO No. 193`, `Badian Municipal Ordinance No. 11-2022`) links to the official text or — for local ordinances that aren't indexed online — to a reputable news article confirming both the ordinance **number** and **year**. Cited law/ordinance must actually cover the claimed subject matter. **Local ordinances** are the hardest subcategory: fabricating an ordinance number with a plausible-sounding year is a common LLM failure mode. If a specific ordinance number can't be verified, soften to "the local government has standardized the rate" instead of citing a fake number. | Follow each cited number; if the source is a news article (not a primary text), the article must explicitly name both the number and year. |
 | **G36** | **Every "since Year" / "N-year history" / specific anchor-date claim** has a source. No inventing anchor durations. `"1,300년 인류사"` without a source is a fabrication. | Each such phrase has a `source_url` in the claim ledger. |
 | **G37** | **Every absolute claim** — "no recorded cases", "only operation in the world", "largest ever", "first X in Philippines" — has a sourced basis. Vague absolutes ("few documented") are preferred when a hard absolute can't be sourced. | Scan the draft for absolute language; each one has a source. |
 | **G38** | **No high-risk-class claim** (`safety`/`legal`/`financial`/`contact`) ships with `confidence < "high"` in the claims.json. Low-confidence high-risk claims are either dropped or replaced with a verified value — not published. | Cross-check risk_class × confidence in claims.json. |
 
 **If any of G33–G38 fails, the draft is revised or the affected claim is removed. Publishing a fabricated citation or wrong emergency number is a first-order credibility failure — worse than a missing metadata field.**
+
+### 2.7 Extended fact-verification gates (NEW — G39–G40)
+
+**Added in v2.1 after a second round of real incidents** (Kawasan Falls / canyoneering post: fabricated administrative classification *"Badian Autonomous City"* — PH has no such classification; misspelled proper nouns *"Pagsanhan"* (should be Pagsanjan) and *"En Salada"* (should be Ensalada); unsourced *"40m waterfall"* when the main tier is actually ~30m; invented geographic features like *"Kabukalan Spring"* and *"Sardine Point"*; an activity ↔ location mismatch *"Davao bungee jumping"* when the PH bungee is at Danao Adventure Park in Bohol). These gates close coverage gaps that G33–G38 didn't explicitly address.
+
+| Gate | Requirement | How to verify |
+|------|-------------|---------------|
+| **G39** | **Every proper noun** — place names, administrative classifications (city / municipality / barangay / province / region / autonomous region), dish or local-food names, foreign-loan words, geographic features (springs, rivers, headwaters, beaches, peaks), organization names — appearing in any **heading**, **table cell**, **📍 metadata block**, or **3+ times** in the body has a `source_url` in the claim ledger. **Spelling and classification must match the cited source verbatim.** Invented classifications like "Autonomous City" (outside BARMM) or invented feature names like "Kabukalan Spring" (no such documented source) fail this gate. | Every qualifying proper noun has an entry; red-team cross-checks spelling and administrative type against Wikipedia / PSA / PhilAtlas / official LGU records. |
+| **G40** | **Every numeric physical measurement** (height, depth, distance, area, weight, duration, capacity, elevation, slope, flow rate) has a `source_url`. Rounding is acceptable when labeled ("약 30m", "~30m", "approximately 30m"); an unlabeled specific like "40m" without a sourced value is treated as a fabrication. **For measurements from multiple sources that disagree (e.g., 30m vs. 40m),** pick the one with the most authoritative source or use a labeled range ("약 30~40m"). | Each measurement in the claim ledger has a source; red-team cross-checks against authoritative data (Wikipedia, gov tourism page, topographic source). |
+
+**If G39 or G40 fails, revise by replacing unverified specifics with sourced ones, softening to labeled approximations, or abstracting to a common-noun alternative.** A common-noun fallback for G39 is often the cleanest fix — *"a three-tiered limestone waterfall"* is sourced-by-default, whereas *"a three-tiered 40-meter waterfall fed by Kabukalan Spring"* piles specifics that each need verification.
 
 ---
 
@@ -169,7 +180,7 @@ If a gate fails, stop and fix **that specific problem** before scoring the rubri
 
 ## 3. Rubric — 100 points across 6 categories
 
-The 38 gates above guarantee **structural minimums** and **freedom from the known hallucination vectors**. The 6 categories below evaluate **quality**. Even a draft that passes all gates can score 50/100 if it is hollow — gate-pass is necessary but not sufficient.
+The 40 gates above guarantee **structural minimums** and **freedom from the known hallucination vectors**. The 6 categories below evaluate **quality**. Even a draft that passes all gates can score 50/100 if it is hollow — gate-pass is necessary but not sufficient.
 
 ### 3.1 Originality & Uniqueness — 20 points
 
@@ -334,7 +345,8 @@ The AI must produce a JSON block like this **internally** (not posted publicly) 
   "emoji_count": 32,
   "gates_passed": ["G1","G2","G3","G4","G5","G6","G7","G8","G9","G10","G11","G12","G13","G14",
                    "G15","G16","G17","G18","G19","G20","G21","G22","G23","G24","G25","G26",
-                   "G27","G28","G29","G30","G31","G32","G33","G34","G35","G36","G37","G38"],
+                   "G27","G28","G29","G30","G31","G32","G33","G34","G35","G36","G37","G38",
+                   "G39","G40"],
   "scores": {
     "originality": 18,
     "depth": 17,
@@ -351,10 +363,10 @@ The AI must produce a JSON block like this **internally** (not posted publicly) 
 ```
 
 **Required fields:**
-- All 38 gates must appear in `gates_passed`. Any missing gate → fail outright, do not submit.
+- All 40 gates must appear in `gates_passed`. Any missing gate → fail outright, do not submit.
 - All 6 scores must be present (no `null`).
 - `total` is the sum of all 6 scores (max 100).
-- `pass = total ≥ 90 AND len(gates_passed) == 38 AND red_team.definite_errors == []`.
+- `pass = total ≥ 90 AND len(gates_passed) == 40 AND red_team.definite_errors == []`.
 - `weak_areas`: every category scoring below the "Good" band (`originality < 13`, `depth < 13`, `accuracy < 9`, `structure < 9`, `reader_value < 13`, `polish < 7`).
 - `revision_round`: 0 for first draft, 1 for first revision, 2 for second revision.
 
@@ -380,6 +392,8 @@ else:
 |---------|-----|
 | **G2 length band** | **Undershoot**: add depth-driven sections (history, comparison with alternatives, persona-targeted advice, FAQ). Do NOT pad with filler — that tanks §3.2. **Overshoot**: tighten by merging overlapping sections, removing tangential content, and cutting redundant adjectives. Consider demoting to a smaller topic class (e.g., a single-venue review rather than a destination guide) if the material genuinely doesn't warrant the higher tier. Both undershoot and overshoot fail G2 equally. |
 | **G33–G38 anti-hallucination** | Extract every flagged claim into `claims.json` with `source_url` + `confidence` + `risk_class` (§10). For `definite_errors` raised by the red-team (§11), either remove the specific, soften to a sourced vague alternative, or research and link a primary source. High-risk classes (safety / legal / financial / contact) must be sourced or dropped — never softened. |
+| **G39 proper nouns** | For each failing proper noun: (a) look up the authoritative spelling on Wikipedia / PhilAtlas / PSA / the owning LGU's page and correct it; (b) verify the administrative classification (e.g., "Municipality of Badian" not "Badian Autonomous City"); or (c) replace the named specific with a common-noun alternative ("a natural spring" instead of a fabricated named spring). |
+| **G40 measurements** | For each failing measurement: (a) source a number from Wikipedia / government tourism data / a topographic source and add `source_url` to the claim ledger; (b) convert the specific number to a labeled approximation ("~30m", "약 30m"); or (c) drop the specific altogether ("a three-tiered waterfall" instead of "a 40-meter three-tiered waterfall"). |
 | **G15/G16 image** | Source 1–2 more images from a different domain. Confirm download → upload → embed pipeline. Verify `--upload-ids` flag is passed. |
 | **G8–G14 metadata** | Re-research; if any field can't be verified, abandon the topic — do not invent. |
 | **G12 coordinates** | Use Google Maps or OpenStreetMap to obtain coordinates ≥ 4 decimals. Round at 4 decimals only if higher precision is unavailable. |
@@ -437,7 +451,7 @@ else:
 ```json
 {
   "word_count": 5421, "image_count": 5,
-  "gates_passed": [/* all 38 */],
+  "gates_passed": [/* all 40 */],
   "scores": { "originality":17,"depth":18,"accuracy":14,"structure":14,"reader_value":19,"polish":9 },
   "total": 91,
   "pass": true
@@ -680,10 +694,14 @@ Every claim in `claims.json` must pass the verification bar for its `risk_class`
 === Anti-hallucination (G33–G38) ===
 [ ] G33  Every academic citation has a DOI or direct URL
 [ ] G34  Every phone / emergency number linked to owning entity's official page
-[ ] G35  Every law / regulation number linked to official statute text
+[ ] G35  Every law / regulation / local-ordinance number linked to official text (or news article naming both number + year)
 [ ] G36  Every "since Year" / anchor-date claim sourced
 [ ] G37  Every absolute claim ("no recorded cases" etc.) sourced
 [ ] G38  No safety/legal/financial/contact claim with confidence < "high"
+
+=== Extended fact-verification (G39–G40) ===
+[ ] G39  Every proper noun in heading/table/📍 metadata (or used 3+ times) has source_url with matching spelling + admin type
+[ ] G40  Every physical measurement (height, depth, distance, duration, capacity) has source_url or is a labeled approximation
 
 === Claim ledger (step 5) ===
 [ ] claims.json produced with every testable assertion
