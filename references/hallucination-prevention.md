@@ -86,6 +86,39 @@ This doc catalogs the specific failure modes observed, the countermeasures added
 - **G37**: Absolute and specific-percentage claims have a sourced basis; prefer vague alternatives when hard numbers can't be sourced.
 - **Drafting rule**: Percentages go into `claims.json`; unsourced ones are SOFTENed to vague language ("high injury rates", "상당수").
 
+### 1.8 Fabricated administrative classification ("Badian Autonomous City")
+
+**What happened** (Kawasan Falls post, v2.1 trigger): The draft referred to `"Badian Autonomous City"` multiple times. The Philippines has no classification called "Autonomous City." Badian is a **municipality** of Cebu Province. "Autonomous" as an administrative qualifier exists only in specific contexts (e.g., BARMM — Bangsamoro Autonomous Region in Muslim Mindanao), not for regular LGUs in the Visayas.
+
+**Root cause**: LLMs default to "authoritative-sounding" compound phrases. Stacking "Autonomous" onto "City" produces text that reads officially without triggering the model's own skepticism. The existing G33–G38 didn't cover administrative classifications specifically — a place's *type* (city / municipality / barangay / province / region) fell outside "citations," "phones," and "laws."
+
+**Countermeasures added**:
+- **G39**: Every proper noun — including administrative classifications — appearing in a heading, table, 📍 metadata block, or 3+ times in the body has a `source_url`. Spelling and admin-type must match the cited source verbatim.
+- **Drafting rule**: Reference the PSA (Philippine Statistics Authority) or PhilAtlas for admin-type lookup. PH LGU types are: **province** / **highly-urbanized city (HUC)** / **independent component city (ICC)** / **component city (CC)** / **municipality** / **barangay**. "Autonomous" applies only to BARMM and the (dissolved) CAR autonomous-region proposals — never to a single Visayan LGU.
+- **Red-team**: Fact-checker cross-references every administrative type against Wikipedia or PhilAtlas; mismatched types are `definite_errors`.
+
+### 1.9 Invented geographic feature names ("Kabukalan Spring", "Sardine Point")
+
+**What happened** (Kawasan Falls post, v2.1 trigger): The draft cited `"Kabukalan Spring"` as the headwater feeding the Matutinao River. No topographic or tourism source confirms a feature by that name. Similarly, `"Sardine Point"` was used for Moalboal's sardine-run snorkeling entry; the actual entry is **Panagsama Beach**.
+
+**Root cause**: Same family of failure as §1.5 (invented "발릴란 balilan" alternative name). Foreign-language geographic features invite plausible-sounding invention — a Cebuano-ish "Kabukalan" + the common feature suffix "Spring" produces prose that reads like a real minor geographic reference, but the feature itself doesn't exist in any published source.
+
+**Countermeasures added**:
+- **G39**: Geographic feature names (springs, rivers, headwaters, beaches, peaks, caves, straits) are proper nouns and require a `source_url`.
+- **Drafting rule**: Minor geographic features (springs, small trails, side beaches) are the highest-risk category — mainstream maps often omit them entirely, making fabrication easy. If a feature can't be found on OpenStreetMap, Wikipedia, or an authoritative government tourism page, **do not name it** — describe it generically ("a natural spring upstream", "the snorkeling entry at the southern end of the beach").
+- **Red-team**: Fact-checker searches each named feature on at least two sources; zero hits = `definite_error`.
+
+### 1.10 Unsourced physical measurements ("40m waterfall")
+
+**What happened** (Kawasan Falls post, v2.1 trigger): The draft stated the main Kawasan Falls tier has a `"drop of approximately 40 meters"`. Wikipedia and multiple tourism sources cite the main (first) tier as approximately **30 meters**; "40m" may conflate total-cascade height or be a memory approximation. Similarly, the draft cited a `"4km canyon stretch"` for the canyoneering route without source verification.
+
+**Root cause**: G36 covers **anchor-dates** (years, durations) but not **physical measurements** (heights, depths, distances). Numeric specifics about physical dimensions fell through the same "specific-and-unsourced" gap that anchor-dates do — the model wants to sound authoritative with a specific number, and "40m" reads better than "approximately 30m."
+
+**Countermeasures added**:
+- **G40**: Every physical measurement (height, depth, distance, area, weight, duration, capacity, elevation) has a `source_url` in the claim ledger. Labeled approximations ("약 30m", "~30m") are acceptable; bare specifics ("40m") without a source are treated as fabrications.
+- **Drafting rule**: If two sources disagree on a measurement, pick the one with the most authoritative source (Wikipedia cites OSM or gov data; gov tourism pages cite their own surveys) or use a labeled range ("30–40m range depending on source"). Never split the difference silently.
+- **Red-team**: Fact-checker cross-checks every measurement against Wikipedia, OSM, or the relevant government tourism page.
+
 ---
 
 ## 2. Anti-patterns — recognize these in your own prose
@@ -101,6 +134,10 @@ When you catch yourself about to write any of these, **stop and verify** or reph
 | "전 세계에서 유일", "최초", "단 한 건도" | Invites false absolute | "주요 사례 중", "드문" |
 | "관찰 개체의 N%" (any specific percentage) | Invites made-up stat | "상당수", "다수" — or cite specific study |
 | "[alternative foreign name]" without a source | Invites invented transliteration | Use only the well-documented name |
+| "[Place] Autonomous City/Region" for a regular LGU | Invents admin classification | Use the PSA designation — usually "Municipality of X" or "X City" |
+| "[Made-up] Spring/River/Beach" for minor geographic features | Invents feature names (same pattern as 1.5, 1.9) | Describe generically ("a natural spring upstream") unless a source confirms the specific name |
+| "N-meter waterfall/cliff/peak" without a source | Invents measurements (cf. G40) | Use labeled approximation ("약 30m") or drop the specific |
+| "[Activity] at [Location]" mismatched in comparison tables | Invents activity-location pairs (e.g., "Davao Bungee" when PH bungee is in Bohol) | Verify each row via a source before including in the table |
 
 ---
 
